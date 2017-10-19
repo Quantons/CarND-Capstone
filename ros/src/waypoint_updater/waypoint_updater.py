@@ -23,17 +23,18 @@ TODO (for Yousuf and Aaron): Stopline location for each traffic light.
 '''
 
 LOOKAHEAD_WPS = 200  # Number of waypoints we will publish. You can change this number
+DEBUG = True
 
 
 class WaypointUpdater(object):
     def __init__(self):
         rospy.init_node('waypoint_updater')
 
-        rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb)
-        rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
+        rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb, queue_size=1)
+
+        self.base_waypoints_sub = rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb, queue_size=1)
 
         # TODO: Add a subscriber for /traffic_waypoint and /obstacle_waypoint below
-
 
         self.final_waypoints_pub = rospy.Publisher('final_waypoints', Lane, queue_size=1)
 
@@ -50,6 +51,9 @@ class WaypointUpdater(object):
         rospy.spin()
 
     def pose_cb(self, msg):
+        if DEBUG:
+            print('position received')
+
         self.pos_x = msg.pose.position.x
         self.pos_y = msg.pose.position.y
         self.pos_z = msg.pose.position.z
@@ -68,13 +72,17 @@ class WaypointUpdater(object):
             else:
                 final_idx = (LOOKAHEAD_WPS + start_idx) % len(self.waypoints)
                 final_wpts.waypoints = self.waypoints[start_idx:len(self.waypoints)] + self.waypoints[0:final_idx]
-            rospy.loginfo('Final waypoints size = %d', len(final_wpts.waypoints))
-            print "Final waypoints size = %d" % len(final_wpts.waypoints)
             self.final_waypoints_pub.publish(final_wpts)
+
+            if DEBUG:
+                print "Final waypoints size = %d" % len(final_wpts.waypoints)
 
     def waypoints_cb(self, msg):
         self.waypoints = msg.waypoints
-        rospy.loginfo('Received waypoints size = %d', len(self.waypoints))
+        if DEBUG:
+            print "Received waypoints size = %d" % len(self.waypoints)
+
+        self.base_waypoints_sub.unregister()
 
     def traffic_cb(self, msg):
         # TODO: Callback for /traffic_waypoint message. Implement
