@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import rospy
+import tf
 from geometry_msgs.msg import PoseStamped
 from styx_msgs.msg import Lane, Waypoint
 
@@ -21,7 +22,7 @@ as well as to verify your TL classifier.
 TODO (for Yousuf and Aaron): Stopline location for each traffic light.
 '''
 
-LOOKAHEAD_WPS = 200 # Number of waypoints we will publish. You can change this number
+LOOKAHEAD_WPS = 200  # Number of waypoints we will publish. You can change this number
 
 
 class WaypointUpdater(object):
@@ -38,15 +39,42 @@ class WaypointUpdater(object):
 
         # TODO: Add other member variables you need below
 
+        self.pos_x = 0.
+        self.pos_y = 0.
+        self.pos_z = 0.
+        self.current_orient = None
+        self.yaw = 0.
+        self.waypoints = None
+        self.next_wpt = None
+
         rospy.spin()
 
     def pose_cb(self, msg):
-        # TODO: Implement
-        pass
+        self.pos_x = msg.pose.position.x
+        self.pos_y = msg.pose.position.y
+        self.pos_z = msg.pose.position.z
+        self.current_orient = msg.pose.orientation
+        _, _, self.yaw = tf.transformations.euler_from_quaternion([self.current_orient.x, self.current_orient.y, self.current_orient.z, self.current_orient.w])
+        self.yaw *= -1.
 
-    def waypoints_cb(self, waypoints):
-        # TODO: Implement
-        pass
+        if self.waypoints is not None:
+            start_idx = self.determine_next_wpt_idx()
+            final_wpts = Lane()
+            final_wpts.header.stamp = rospy.Time.now()
+
+            final_wpt_idx = start_idx + LOOKAHEAD_WPS
+            if final_wpt_idx < len(self.waypoints):  # protect against wrapping around the waypoints array
+                final_wpts.waypoints = self.waypoints[start_idx:final_wpt_idx]
+            else:
+                final_idx = (LOOKAHEAD_WPS + start_idx) % len(self.waypoints)
+                final_wpts.waypoints = self.waypoints[start_idx:len(self.waypoints)] + self.waypoints[0:final_idx]
+            rospy.loginfo('Final waypoints size = %d', len(final_wpts.waypoints))
+            print "Final waypoints size = %d" % len(final_wpts.waypoints)
+            self.final_waypoints_pub.publish(final_wpts)
+
+    def waypoints_cb(self, msg):
+        self.waypoints = msg.waypoints
+        rospy.loginfo('Received waypoints size = %d', len(self.waypoints))
 
     def traffic_cb(self, msg):
         # TODO: Callback for /traffic_waypoint message. Implement
@@ -64,11 +92,39 @@ class WaypointUpdater(object):
 
     def distance(self, waypoints, wp1, wp2):
         dist = 0
-        dl = lambda a, b: math.sqrt((a.x-b.x)**2 + (a.y-b.y)**2  + (a.z-b.z)**2)
-        for i in range(wp1, wp2+1):
+        dl = lambda a, b: math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2 + (a.z - b.z) ** 2)
+        for i in range(wp1, wp2 + 1):
             dist += dl(waypoints[wp1].pose.pose.position, waypoints[i].pose.pose.position)
             wp1 = i
         return dist
+
+    def bearing_wpt_to_car(self, wpt):
+        shiftx = wpt.pose.pose.position.x - self.pos_x
+        shifty = wpt.pose.pose.position.y - self.pos_y
+
+        delta_x = shiftx * math.cos(self.yaw) - shifty * math.sin(self.yaw)
+        delta_y = shiftx * math.sin(self.yaw) + shifty * math.cos(self.yaw)
+
+        return math.atan2(delta_y, delta_x)
+
+    def distance_wpt_to_car(self, wpt):
+        return math.sqrt((self.pos_x - wpt.pose.pose.position.x) ** 2 +
+                         (self.pos_y - wpt.pose.pose.position.y) ** 2 +
+                         (self.pos_z - wpt.pose.pose.position.z) ** 2)
+
+    def determine_next_wpt_idx(self):
+        wpts = self.waypoints
+        min_distance = 1e10
+        index = 0
+
+        for wpt_idx in range(len(wpts)):
+            bearing = self.bearing_wpt_to_car(self.waypoints[wpt_idx])
+            dist = self.distance_wpt_to_car(self.waypoints[wpt_idx])
+            if dist < min_distance and bearing > 0.0:
+                index = wpt_idx
+                min_distance = dist
+
+        return index
 
 
 if __name__ == '__main__':
