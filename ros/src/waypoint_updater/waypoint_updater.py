@@ -2,7 +2,7 @@
 
 import rospy
 import tf
-from geometry_msgs.msg import PoseStamped, TwistStamped
+from geometry_msgs.msg import PoseStamped, TwistStamped, Pose, Point
 from styx_msgs.msg import Lane, Waypoint, TrafficLightArray, TrafficLight
 
 import math
@@ -25,7 +25,7 @@ TODO (for Yousuf and Aaron): Stopline location for each traffic light.
 LOOKAHEAD_WPS = 50  # Number of waypoints we will publish. You can change this number
 STOP_LINE     = 30  # Distance from traffic light to stop line
 MAX_SPEED     = 11.176
-DEBUG = True
+DEBUG = False
 
 
 def distance(pose1, pose2):
@@ -35,6 +35,9 @@ def distance(pose1, pose2):
 class WaypointUpdater(object):
     def __init__(self):
         rospy.init_node('waypoint_updater')
+
+        self.max_acc = 1
+        self.max_dec = -1
 
         rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb, queue_size=1)
         self.base_waypoints_sub = rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb, queue_size=1)
@@ -76,37 +79,45 @@ class WaypointUpdater(object):
                 final_idx = (LOOKAHEAD_WPS + start_idx) % len(self.waypoints)
                 final_wpts.waypoints = self.waypoints[start_idx:len(self.waypoints)] + self.waypoints[0:final_idx]
 
+            # Acceleration
+            v = self.velocity
+            pose = Pose()
+            pose.position = Point()
+            pose.position.x = self.pos_x
+            pose.position.y = self.pos_y
+            for index in range(len(final_wpts.waypoints)):
+                wpt = final_wpts.waypoints[index]
+                new_v = min(math.sqrt(v ** 2 + 2 * self.max_acc * distance(pose, wpt.pose.pose)), MAX_SPEED)
+                wpt.twist.twist.linear.x = MAX_SPEED
+                v = new_v
+                pose = wpt.pose.pose
+            max_v = v
+
+            # Deceleration
             if self.next_light is not None:
                 s_light = distance(self.waypoints[start_idx].pose.pose, self.next_light.pose.pose)
                 s_stop = s_light - STOP_LINE
+                s_brake = s_stop - (-(v ** 2) / (2 * self.max_dec))
 
-                is_intersection = s_stop < -2.
-                is_brake = math.fabs(s_stop) < 12
-                self.target_v = self.velocity
+                for index in range(len(final_wpts.waypoints) - 1, -1, -1):
+                    wpt = final_wpts.waypoints[index]
+                    s_self = self.distance_wpt_to_car(wpt.pose.pose)
+                    s = distance(pose, wpt.pose.pose)
+                    if s_self > s_stop:
+                        wpt.twist.twist.linear.x = 0
+                    elif s_self > s_brake:
+                        new_v = max(math.sqrt(v ** 2 + 2 * self.max_dec * s), 0)
+                        wpt.twist.twist.linear.x = max_v - new_v
+                        v = new_v
+                    pose = wpt.pose.pose
 
-                for i in range(len(final_wpts.waypoints)):
-                    wpt = final_wpts.waypoints[i]
-                    if is_brake and not is_intersection:
-                        s = distance(wpt.pose.pose, self.next_light.pose.pose) - STOP_LINE
-                        v = self.target_v
-                        if v < 5.:
-                            v = 0.
-                            a = 0.
-                        else:
-                            a = -(v ** 2) / (2 * s_stop)
 
-                        if s < 0.:
-                            self.target_v = 0.
-                        else:
-                            v_s = v ** 2 + 2 * a * s
-                            self.target_v = math.sqrt(max(v_s, 0))
-                    else:
-                        self.target_v = MAX_SPEED
-
-                    wpt.twist.twist.linear.x = self.target_v
-            elif DEBUG:
-                print "Light is not found"
-
+            # elif DEBUG:
+            #     print "Light is not found"
+            s = "Waypoints: "
+            for i in final_wpts.waypoints:
+                s += str(i.twist.twist.linear.x) + " "
+            print s
             self.final_waypoints_pub.publish(final_wpts)
 
             # if DEBUG:
@@ -148,19 +159,7 @@ class WaypointUpdater(object):
 
             if DEBUG:
                 print "Distance to light %.15f :::: %d" % (light_dist, lights[light_index].state)
-            if light_index >= 0 and lights[light_index].state == TrafficLight.RED:
-                # wpt_index = -1
-                # wpt_dist = 1e10
-                # for idx in range(len(self.waypoints)):
-                #     wpt = self.waypoints[idx]
-                #     dist = distance(wpt.pose.pose, lights[light_index].pose.pose)
-                #     if dist < wpt_dist:
-                #         wpt_index = idx
-                #         wpt_dist = dist
-
-                # if DEBUG:
-                #     print "Waypoint of traffic light: %.15f:%.15f" % (self.waypoints[wpt_index].pose.pose.position.x, self.waypoints[wpt_index].pose.pose.position.y)
-
+            if light_index >= 0 and lights[light_index].state != TrafficLight.GREEN:
                 self.next_light = lights[light_index]
             else:
                 self.next_light = None
