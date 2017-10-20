@@ -6,7 +6,7 @@ import math
 class Controller(object):
     def __init__(self, yaw_controller, accel_limit, decel_limit):
         self.yaw_controller = yaw_controller
-        self.pid = PID(2, 0.05, 0.1, decel_limit, accel_limit)
+        self.pid = PID(10, 0.05, 0.5, decel_limit, accel_limit)
         self.lp_filter = LowPassFilter(10., 1.)
 
         self.dbw_enabled = False
