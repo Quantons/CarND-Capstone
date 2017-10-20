@@ -2,8 +2,8 @@
 
 import rospy
 import tf
-from geometry_msgs.msg import PoseStamped
-from styx_msgs.msg import Lane, Waypoint
+from geometry_msgs.msg import PoseStamped, TwistStamped
+from styx_msgs.msg import Lane, Waypoint, TrafficLightArray
 
 import math
 
@@ -22,8 +22,14 @@ as well as to verify your TL classifier.
 TODO (for Yousuf and Aaron): Stopline location for each traffic light.
 '''
 
-LOOKAHEAD_WPS = 200  # Number of waypoints we will publish. You can change this number
+LOOKAHEAD_WPS = 50  # Number of waypoints we will publish. You can change this number
+STOP_LINE     = 30  # Distance from traffic light to stop line
+MAX_SPEED  = 11.176
 DEBUG = False
+
+
+def distance(pose1, pose2):
+    return math.sqrt((pose1.position.x - pose2.position.x) ** 2 + (pose1.position.y - pose2.position.y) ** 2 + (pose1.position.z - pose2.position.z) ** 2)
 
 
 class WaypointUpdater(object):
@@ -31,14 +37,11 @@ class WaypointUpdater(object):
         rospy.init_node('waypoint_updater')
 
         rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb, queue_size=1)
-
         self.base_waypoints_sub = rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb, queue_size=1)
-
-        # TODO: Add a subscriber for /traffic_waypoint and /obstacle_waypoint below
+        rospy.Subscriber('/vehicle/traffic_lights', TrafficLightArray, self.traffic_lights_cb)
+        rospy.Subscriber('/current_velocity', TwistStamped, self.velocity_cb)
 
         self.final_waypoints_pub = rospy.Publisher('final_waypoints', Lane, queue_size=1)
-
-        # TODO: Add other member variables you need below
 
         self.pos_x = 0.
         self.pos_y = 0.
@@ -46,7 +49,9 @@ class WaypointUpdater(object):
         self.current_orient = None
         self.yaw = 0.
         self.waypoints = None
-        self.next_wpt = None
+        self.light_wpt_idx = None
+        self.velocity = 0.
+        self.target_v = MAX_SPEED
 
         rospy.spin()
 
@@ -67,15 +72,47 @@ class WaypointUpdater(object):
             final_wpts.header.stamp = rospy.Time.now()
 
             final_wpt_idx = start_idx + LOOKAHEAD_WPS
+            if DEBUG and self.light_wpt_idx is not None:
+                print "Final wpt: %d : Light wpt: %d" % (final_wpt_idx, self.light_wpt_idx)
+
             if final_wpt_idx < len(self.waypoints):  # protect against wrapping around the waypoints array
                 final_wpts.waypoints = self.waypoints[start_idx:final_wpt_idx]
             else:
                 final_idx = (LOOKAHEAD_WPS + start_idx) % len(self.waypoints)
                 final_wpts.waypoints = self.waypoints[start_idx:len(self.waypoints)] + self.waypoints[0:final_idx]
+
+            s_self = distance(self.waypoints[start_idx].pose.pose, self.waypoints[self.light_wpt_idx].pose.pose)
+            s_stop = s_self - STOP_LINE
+            is_intersection = s_stop < -2.
+            is_brake = math.fabs(s_stop) < 12
+            if self.light_wpt_idx is not None:
+                for i in range(len(final_wpts.waypoints)):
+                    wpt = final_wpts.waypoints[i]
+                    if is_brake and not is_intersection:
+                        s = distance(wpt.pose.pose, self.waypoints[self.light_wpt_idx].pose.pose) - STOP_LINE
+                        v = self.target_v
+                        if v < 5.:
+                            v = 0.
+                            a = 0.
+                        else:
+                            a = -1 * (v ** 2 / s) / 2
+
+                        if s < 0.:
+                            self.target_v = 0.
+                        else:
+                            v_s = v ** 2 + 2 * a * s
+                            self.target_v = math.sqrt(max(v_s, 0))
+                    else:
+                        self.target_v = MAX_SPEED
+
+                    wpt.twist.twist.linear.x = self.target_v
+
             self.final_waypoints_pub.publish(final_wpts)
 
-            if DEBUG:
-                print "Final waypoints size = %d" % len(final_wpts.waypoints)
+            # if DEBUG:
+            #     print "First waypoint is %d:%d" % (final_wpts.waypoints[0].pose.pose.position.x, final_wpts.waypoints[0].pose.pose.position.y)
+            #     print "Car position is %d:%d" % (self.pos_x, self.pos_y)
+            #     print "Final waypoints size = %d" % len(final_wpts.waypoints)
 
     def waypoints_cb(self, msg):
         self.waypoints = msg.waypoints
@@ -92,33 +129,64 @@ class WaypointUpdater(object):
         # TODO: Callback for /obstacle_waypoint message. We will implement it later
         pass
 
+    def velocity_cb(self, msg):
+        self.velocity = msg.twist.linear.x
+
+    def traffic_lights_cb(self, msg):
+        if self.current_orient is not None and self.waypoints is not None:
+            lights = msg.lights
+            light_dist = 1e10
+            light_index = -1
+
+            for idx in range(len(lights)):
+                light = lights[idx]
+                bearing = self.bearing_wpt_to_car(light.pose.pose)
+                dist = self.distance_wpt_to_car(light.pose.pose)
+                if dist < light_dist and bearing > 0.0:
+                    light_index = idx
+                    light_dist = dist
+
+            if light_index >= 0 or lights[light_index].state <= 1:
+                if DEBUG:
+                    print "Distance to light %.15f :::: %d" % (light_dist, lights[light_index].state)
+
+                wpt_index = -1
+                wpt_dist = 1e10
+                for idx in range(len(self.waypoints)):
+                    wpt = self.waypoints[idx]
+                    dist = distance(wpt.pose.pose, lights[light_index].pose.pose)
+                    if dist < wpt_dist:
+                        wpt_index = idx
+                        wpt_dist = dist
+
+                if DEBUG:
+                    print "Waypoint of traffic light: %.15f:%.15f" % (self.waypoints[wpt_index].pose.pose.position.x, self.waypoints[wpt_index].pose.pose.position.y)
+
+                self.light_wpt_idx = wpt_index
+            else:
+                self.light_wpt_idx = None
+                if DEBUG:
+                    print "Light not found"
+
     def get_waypoint_velocity(self, waypoint):
         return waypoint.twist.twist.linear.x
 
     def set_waypoint_velocity(self, waypoints, waypoint, velocity):
         waypoints[waypoint].twist.twist.linear.x = velocity
 
-    def distance(self, waypoints, wp1, wp2):
-        dist = 0
-        dl = lambda a, b: math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2 + (a.z - b.z) ** 2)
-        for i in range(wp1, wp2 + 1):
-            dist += dl(waypoints[wp1].pose.pose.position, waypoints[i].pose.pose.position)
-            wp1 = i
-        return dist
-
-    def bearing_wpt_to_car(self, wpt):
-        shiftx = wpt.pose.pose.position.x - self.pos_x
-        shifty = wpt.pose.pose.position.y - self.pos_y
+    def bearing_wpt_to_car(self, pose):
+        shiftx = pose.position.x - self.pos_x
+        shifty = pose.position.y - self.pos_y
 
         delta_x = shiftx * math.cos(self.yaw) - shifty * math.sin(self.yaw)
         delta_y = shiftx * math.sin(self.yaw) + shifty * math.cos(self.yaw)
 
-        return math.atan2(delta_y, delta_x)
+        return math.atan2(delta_x, delta_y)
 
-    def distance_wpt_to_car(self, wpt):
-        return math.sqrt((self.pos_x - wpt.pose.pose.position.x) ** 2 +
-                         (self.pos_y - wpt.pose.pose.position.y) ** 2 +
-                         (self.pos_z - wpt.pose.pose.position.z) ** 2)
+    def distance_wpt_to_car(self, pose):
+        return math.sqrt((self.pos_x - pose.position.x) ** 2 +
+                         (self.pos_y - pose.position.y) ** 2 +
+                         (self.pos_z - pose.position.z) ** 2)
 
     def determine_next_wpt_idx(self):
         wpts = self.waypoints
@@ -126,8 +194,8 @@ class WaypointUpdater(object):
         index = 0
 
         for wpt_idx in range(len(wpts)):
-            bearing = self.bearing_wpt_to_car(self.waypoints[wpt_idx])
-            dist = self.distance_wpt_to_car(self.waypoints[wpt_idx])
+            bearing = self.bearing_wpt_to_car(self.waypoints[wpt_idx].pose.pose)
+            dist = self.distance_wpt_to_car(self.waypoints[wpt_idx].pose.pose)
             if dist < min_distance and bearing > 0.0:
                 index = wpt_idx
                 min_distance = dist

@@ -33,7 +33,7 @@ that we have created in the `__init__` function.
 '''
 
 MIN_SPEED = 5.
-DEBUG = True
+DEBUG = False
 
 class DBWNode(object):
     def __init__(self):
@@ -72,18 +72,19 @@ class DBWNode(object):
 
     def enabled_cb(self, msg):
         self.dbw_enabled = msg.data
-        rospy.loginfo("DBW enabled = " + str(self.dbw_enabled))
+        if DEBUG:
+            rospy.loginfo("DBW enabled = " + str(self.dbw_enabled))
 
     def twist_cb(self, msg):
         self.proposed_linear = msg.twist.linear.x
         self.proposed_angular = msg.twist.angular.z
-        rospy.logdebug("Twist update: angular = %d; linear = %d" % (self.proposed_angular, self.proposed_linear))
-        pass
+        if DEBUG:
+            rospy.logdebug("Twist update: angular = %d; linear = %d" % (self.proposed_angular, self.proposed_linear))
 
     def velocity_cb(self, msg):
         self.velocity = msg.twist.linear.x
-        rospy.logdebug("Velocity update: %d" % self.velocity)
-        pass
+        if DEBUG:
+            rospy.logdebug("Velocity update: %d" % self.velocity)
 
     def loop(self):
         rate = rospy.Rate(50)  # 50Hz
@@ -99,12 +100,14 @@ class DBWNode(object):
                     self.dbw_enabled)
 
                 if self.dbw_enabled:
-                    rospy.loginfo("Steering: %d" % steer)
                     self.publish(throttle, brake, steer)
 
             rate.sleep()
 
     def publish(self, throttle, brake, steer):
+        if DEBUG:
+            rospy.loginfo("Controls: %.15f:%.15f:%.15f" % (throttle, brake, steer))
+
         tcmd = ThrottleCmd()
         tcmd.enable = True
         tcmd.pedal_cmd_type = ThrottleCmd.CMD_PERCENT
