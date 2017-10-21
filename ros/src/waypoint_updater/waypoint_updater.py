@@ -36,7 +36,7 @@ class WaypointUpdater(object):
     def __init__(self):
         rospy.init_node('waypoint_updater')
 
-        self.max_dec = rospy.get_param('~decel_limit', -5)
+        self.max_dec = rospy.get_param('~decel_limit', -5) * 0.3
         self.max_acc = rospy.get_param('~accel_limit', 1.)
 
         rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb, queue_size=1)
