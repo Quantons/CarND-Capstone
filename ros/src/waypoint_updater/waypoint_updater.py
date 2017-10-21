@@ -106,7 +106,7 @@ class WaypointUpdater(object):
                     if s_self > s_stop:
                         wpt.twist.twist.linear.x = 0
                     elif s_self > s_brake:
-                        new_v = max(math.sqrt(v ** 2 + 2 * self.max_dec * s), 0)
+                        new_v = math.sqrt(max(v ** 2 + 2 * self.max_dec * s, 0))
                         wpt.twist.twist.linear.x = max_v - new_v
                         v = new_v
                     pose = wpt.pose.pose
