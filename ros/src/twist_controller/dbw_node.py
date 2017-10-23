@@ -39,6 +39,7 @@ class DBWNode(object):
     def __init__(self):
         rospy.init_node('dbw_node', log_level=rospy.INFO)
 
+        vehicle_mass = rospy.get_param('~vehicle_mass', 1736.35)
         decel_limit = rospy.get_param('~decel_limit', -5)
         accel_limit = rospy.get_param('~accel_limit', 1.)
         wheel_base = rospy.get_param('~wheel_base', 2.8498)
@@ -58,7 +59,8 @@ class DBWNode(object):
                 max_lat_accel,
                 max_steer_angle),
             accel_limit,
-            decel_limit)
+            decel_limit,
+            vehicle_mass)
 
         rospy.Subscriber('/vehicle/dbw_enabled', Bool, self.enabled_cb)
         rospy.Subscriber('/twist_cmd', TwistStamped, self.twist_cb)

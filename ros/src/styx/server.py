@@ -9,10 +9,10 @@ from flask import Flask, render_template
 from bridge import Bridge
 from conf import conf
 
-eventlet.monkey_patch()
-
-# sio = socketio.Server()
-sio = socketio.Server(async_mode='eventlet')
+# eventlet.monkey_patch()
+#
+sio = socketio.Server()
+# sio = socketio.Server(async_mode='eventlet')
 app = Flask(__name__)
 msgs = []
 
