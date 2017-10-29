@@ -7,7 +7,7 @@ from styx_msgs.msg import Lane
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 from tl_ssd_detector.tl_ssd_detector import TLSSDDetector
-from tl_cnn_classifier.tl_cnn_classifier import TLCNNClassifier
+from tl_cnn_classification.tl_cnn_classifier import TLCNNClassifier
 
 import tf
 import cv2
