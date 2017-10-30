@@ -30,16 +30,6 @@ class TLDetector(object):
         self.camera_image = None
         self.image_index = 0
 
-        config_string = rospy.get_param("/traffic_light_config")
-        self.config = yaml.load(config_string)
-
-        self.sub2 = rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb, queue_size=1)
-        rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb, queue_size=1)
-        rospy.Subscriber('/image_color', Image, self.image_cb, queue_size=1)
-
-        self.upcoming_traffic_light_wp_pub = rospy.Publisher('/traffic_waypoint', Int32, queue_size=1)
-        self.upcoming_traffic_light_state_pub = rospy.Publisher('/traffic_state', Int32, queue_size=1)
-
         self.bridge = CvBridge()
         self.light_classifier = TLCNNClassifier()
         self.listener = tf.TransformListener()
@@ -49,6 +39,16 @@ class TLDetector(object):
         self.last_state = TrafficLight.UNKNOWN
         self.last_wp = -1
         self.state_count = 0
+
+        config_string = rospy.get_param("/traffic_light_config")
+        self.config = yaml.load(config_string)
+
+        self.sub2 = rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb, queue_size=1)
+        rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb, queue_size=1)
+        rospy.Subscriber('/image_color', Image, self.image_cb, queue_size=1)
+
+        self.upcoming_traffic_light_wp_pub = rospy.Publisher('/traffic_waypoint', Int32, queue_size=1)
+        self.upcoming_traffic_light_state_pub = rospy.Publisher('/traffic_state', Int32, queue_size=1)
 
         rospy.spin()
 
@@ -68,8 +68,7 @@ class TLDetector(object):
 
         """
         self.image_index += 1
-        if self.image_index % 5 != 1:
-            # skip 4 images out of 5
+        if self.image_index % 3 != 1:
             return
 
         self.has_image = True
@@ -150,6 +149,11 @@ class TLDetector(object):
             tl_state = self.light_classifier.get_classification(resized_image)
             if tl_state != TrafficLight.GREEN:
                 tl_state = TrafficLight.RED
+
+            if tl_state == TrafficLight.GREEN:
+                print "GREEN"
+            else:
+                print "RED or YELLOW"
 
         return tl_state
 

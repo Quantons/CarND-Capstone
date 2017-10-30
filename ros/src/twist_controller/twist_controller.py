@@ -3,7 +3,7 @@ from lowpass import LowPassFilter
 import rospy
 import math
 
-DEBUG = True
+DEBUG = False
 
 class Controller(object):
     def __init__(self, yaw_controller, accel_limit, decel_limit, weight):
