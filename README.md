@@ -32,7 +32,10 @@ docker run -p 4567:4567 -v $PWD:/capstone -v /tmp/log:/root/.ros/ --rm -it capst
 
 ### Usage
 
-1. Download model from [Google Drive](https://drive.google.com/file/d/0B2ZwmdEkneYxQkd2bi1yVFBIbzg) and put it in the following folder: ros/src/tl_detector/tl_ssd_detector/checkpoint/ 
+1. Download model from [Google Drive](https://drive.google.com/file/d/0B2ZwmdEkneYxQkd2bi1yVFBIbzg) and put it in the following folder:
+```bash
+ros/src/tl_detector/tl_ssd_detector/checkpoint/ 
+```
 
 2. Clone the project repository
 ```bash
