@@ -46,7 +46,7 @@ class TLSSDDetector(object):
             self.predictions, self.localisations, _, _ = ssd_net.net(self.image_4d, is_training=False, reuse=reuse)
 
         # Restore SSD model.
-        ckpt_filename = 'tl_ssd_detector/checkpoint/model.ckpt-226812'
+        ckpt_filename = 'tl_ssd_detector/checkpoint/model.ckpt-ssd'
         self.isess = tf.Session(config=config)
         self.isess.run(tf.global_variables_initializer())
         saver = tf.train.Saver()

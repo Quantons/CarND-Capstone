@@ -178,6 +178,7 @@ class TLDetector(object):
         light_wp, state = -1, TrafficLight.UNKNOWN
         car_position = None
         stop_line_wp_index = -1
+        closest_light_dist = float('inf')
 
         if self.pose:
             car_position = self.get_closest_waypoint(self.pose.pose)

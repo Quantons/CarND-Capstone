@@ -2,6 +2,7 @@
 
 import rospy
 import tf
+from std_msgs.msg import Int32
 from geometry_msgs.msg import PoseStamped, TwistStamped, Pose, Point
 from styx_msgs.msg import Lane, Waypoint, TrafficLightArray, TrafficLight
 
@@ -42,10 +43,13 @@ class WaypointUpdater(object):
 
         rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb, queue_size=1)
         self.base_waypoints_sub = rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb, queue_size=1)
-        rospy.Subscriber('/vehicle/traffic_lights', TrafficLightArray, self.traffic_lights_cb)
+        # rospy.Subscriber('/vehicle/traffic_lights', TrafficLightArray, self.traffic_lights_cb)
         rospy.Subscriber('/current_velocity', TwistStamped, self.velocity_cb)
 
         self.final_waypoints_pub = rospy.Publisher('final_waypoints', Lane, queue_size=1)
+
+        rospy.Subscriber('/traffic_waypoint', Int32, self.traffic_cb, queue_size=1)
+        rospy.Subscriber('/traffic_state', Int32, self.traffic_state_cb, queue_size=1)
 
         self.pos_x = 0.
         self.pos_y = 0.
@@ -56,6 +60,7 @@ class WaypointUpdater(object):
         self.next_light = None
         self.velocity = 0.
         self.target_v = MAX_SPEED
+        self.traffic_light_state = TrafficLight.RED
 
         rospy.spin()
 
@@ -95,7 +100,8 @@ class WaypointUpdater(object):
             max_v = v
 
             # Deceleration
-            if self.next_light is not None:
+            # if self.next_light is not None:
+            if self.next_light is not None and self.traffic_light_state == TrafficLight.RED:
                 s_light = distance(self.waypoints[start_idx].pose.pose, self.next_light.pose.pose)
                 s_stop = s_light - STOP_LINE
 
@@ -138,11 +144,15 @@ class WaypointUpdater(object):
         self.base_waypoints_sub.unregister()
 
     def traffic_cb(self, msg):
-        # TODO: Callback for /traffic_waypoint message. Implement
-        pass
+        if msg.data == -1:
+            self.next_light = None
+        else:
+            self.next_light = msg.data
+
+    def traffic_state_cb(self, msg):
+        self.traffic_light_state = msg.data
 
     def obstacle_cb(self, msg):
-        # TODO: Callback for /obstacle_waypoint message. We will implement it later
         pass
 
     def velocity_cb(self, msg):

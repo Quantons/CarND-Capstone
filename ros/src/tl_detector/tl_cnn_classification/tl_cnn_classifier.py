@@ -15,8 +15,8 @@ class TLCNNClassifier(object):
             config = tf.ConfigProto(log_device_placement=False, gpu_options=gpu_options)
             self.sess = tf.Session(config=config)
 
-            saver = tf.train.import_meta_graph('tl_cnn_classifier/checkpoint/cnn.ckpt.meta')
-            saver.restore(self.sess, 'tl_cnn_classifier/checkpoint/cnn.ckpt')
+            saver = tf.train.import_meta_graph('tl_cnn_classification/checkpoint/cnn.ckpt.meta')
+            saver.restore(self.sess, 'tl_cnn_classification/checkpoint/cnn.ckpt')
 
             self.input_image = tf.get_default_graph().get_tensor_by_name("input_image:0")
             self.model_output = tf.get_default_graph().get_tensor_by_name("model_output:0")
