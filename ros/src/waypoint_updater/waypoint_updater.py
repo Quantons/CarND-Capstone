@@ -147,7 +147,7 @@ class WaypointUpdater(object):
         if msg.data == -1:
             self.next_light = None
         else:
-            self.next_light = msg.data
+            self.next_light = self.waypoints[msg.data]
 
     def traffic_state_cb(self, msg):
         self.traffic_light_state = msg.data
