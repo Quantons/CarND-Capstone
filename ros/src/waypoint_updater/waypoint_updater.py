@@ -2,9 +2,9 @@
 
 import rospy
 import tf
-from std_msgs.msg import Int32
 from geometry_msgs.msg import PoseStamped, TwistStamped, Pose, Point
 from styx_msgs.msg import Lane, Waypoint, TrafficLightArray, TrafficLight
+from light_msgs.msg import UpcomingLight
 
 import math
 
@@ -48,8 +48,7 @@ class WaypointUpdater(object):
 
         self.final_waypoints_pub = rospy.Publisher('final_waypoints', Lane, queue_size=1)
 
-        rospy.Subscriber('/traffic_waypoint', Int32, self.traffic_cb, queue_size=1)
-        rospy.Subscriber('/traffic_state', Int32, self.traffic_state_cb, queue_size=1)
+        rospy.Subscriber('/upcoming_light', UpcomingLight, self.upcoming_lt_cb, queue_size=1)
 
         self.pos_x = 0.
         self.pos_y = 0.
@@ -101,8 +100,9 @@ class WaypointUpdater(object):
 
             # Deceleration
             # if self.next_light is not None:
-            if self.next_light is not None and self.traffic_light_state == TrafficLight.RED:
-                s_light = distance(self.waypoints[start_idx].pose.pose, self.next_light.pose.pose)
+            if self.next_light is not None:
+                # s_light = distance(self.waypoints[start_idx].pose.pose, self.next_light.pose.pose)
+                s_light = distance(self.waypoints[start_idx].pose.pose, self.next_light.pose)
                 s_stop = s_light - STOP_LINE
 
                 if s_stop > 0:
@@ -151,6 +151,14 @@ class WaypointUpdater(object):
 
     def traffic_state_cb(self, msg):
         self.traffic_light_state = msg.data
+
+    def upcoming_lt_cb(self, msg):
+        print("Detection received: {}".format(msg.state))
+        # Check if light is red or yellow, fill message
+        if ((msg.state == 0) or (msg.state == 1)) and msg.waypoint is not None:
+            self.next_light = msg.pose
+        else:
+            self.next_light = None
 
     def obstacle_cb(self, msg):
         pass
